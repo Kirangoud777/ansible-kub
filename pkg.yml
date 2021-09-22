@@ -1,0 +1,67 @@
+- hosts: [webserver]
+  become: yes
+  tasks:
+   - name: disable firewall service
+     service: name=firewall state=stopped enabled=false
+     command: iptables -F
+     command: systemctl stop firewalld
+     command: systemctl disable firewalld 
+#   - name: disable selinux
+     command: setenforce 0 
+     command: sed -i --follow-symlinks 's/SELINUX
+   - name: ensure net.bridge.bridge-nf-call-iptables is set to 1   
+     command: echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables
+   - name: Disable SWAP 
+     command: swapoff -a
+   - name: Install yum-utils device-mapper-persistent-data lvm2  
+     yum: name=utils device-mapper-persistent-data lvm2  state=installed
+   - name: configuring repository to download docker
+     command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+   
+#  - name: Disable SWAP in fstab 
+#     lineinfile:
+#       path: /etc/fstab
+#       regexp: 'swap'
+#       state: absent
+
+   - name: install Docker
+     yum: name=docker state=installed
+     service: name=docker state=started
+
+   - name: telling docker service to use systemd
+     command: sed -i '/^ExecStart/ s/$/ --exec-opt native.cgroupdriver=systemd/'     /usr/lib/systemd/system/docker.service 
+     command: systemctl daemon-reload
+     command: systemctl enable docker --now
+     command: systemctl status docker
+#--
+#   - name: add Kubernetes YUM repository
+#     yum_repository:
+#      name: Kubernetes
+#      description: Kubernetes YUM repository
+#      baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_6#      gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+#      gpgcheck: yes
+#--
+   - name: setting up repo
+     command: cat <<EOF > /etc/yum.repos.d/kubernetes.repo 
+              [kubernetes]
+              name=Kubernetes
+              baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+              enabled=1
+              gpgcheck=0
+              repo_gpgcheck=0
+              gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+              https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+              EOF
+   - name: install {{items}} package
+     yum: name={{items}} state=installed
+     with_items: 
+          - kubelet
+          - kubeadm
+          - kubectl 
+   - name: start {{items}} package
+     service: name={{items}} state=started
+     with_items: 
+          - kubelet
+          - kubeadm
+          - kubectl  
+     command: systemctl enable kubelet
